@@ -1,23 +1,20 @@
 import logging
 import os
+import sys
 import time
 from http import HTTPStatus
 
 import requests
 import telegram
 from dotenv import load_dotenv
-from logging.handlers import RotatingFileHandler
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    filename='homework_bot.log',
-    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-)
-
 logger = logging.getLogger(__name__)
-handler = RotatingFileHandler('homework_bot.log', maxBytes=50000000, backupCount=5)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -40,9 +37,9 @@ def send_message(bot, message):
     """Отправка сообщения с текущим статусом проверки."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        logging.info('Сообщение успешно отправлено.')
+        logger.info('Сообщение успешно отправлено.')
     except Exception as error:
-        logging.error(f'Сообщение не отправлено {error}')
+        logger.error(f'Сообщение не отправлено {error}')
 
 
 def get_api_answer(current_timestamp):
@@ -53,34 +50,38 @@ def get_api_answer(current_timestamp):
         answer = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except Exception as error:
         logger.error(f'API не доступен: {error}')
-    else:
-        if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
-            raise Exception(f'HTTP ERROR: {answer.status_code}')
+        raise SystemError(f'API не доступен: {error}')
+
+    if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
+        logger.error(f'HTTP ERROR: {answer.status_code}')
+        raise Exception(f'HTTP ERROR: {answer.status_code}')
+    elif answer.status_code != HTTPStatus.OK:
+        logger.error(f'HTTP ERROR: {answer.status_code}')
+        raise Exception(f'HTTP ERROR: {answer.status_code}')
     return answer.json()
 
 
 def check_response(response):
     """Проверяет ответ API на корректность и возвращает список работ."""
     if type(response) is not dict:
-        raise TypeError('Некорректный ответ')
+        logger.error('Некорректный тип данных')
+        raise TypeError('Некорректный тип данных')
+
     try:
         homeworks = response['homeworks']
-    except Exception as error:
+    except KeyError as error:
         logger.error(f'Список работ не доступен: {error}')
+
+    if homeworks[0] is None:
+        logger.error('Данные отсутствуют.')
+        raise IndexError('Данные отсутствуют.')
     return homeworks
 
 
 def parse_status(homework):
     """Проверка статуса проверки последней работы."""
-    try:
-        homework_name = homework['homeworks'][0]['lesson_name']
-    except Exception as error:
-        logger.error(f'Список работ не доступен: {error}')
-
-    try:
-        homework_status = homework['homeworks'][0]['status']
-    except Exception as error:
-        logger.error(f'Статус работы не доступен: {error}')
+    homework_name = homework[0]['homework_name']
+    homework_status = homework[0]['status']
 
     if homework_status not in HOMEWORK_STATUSES:
         raise Exception(f'Неизвестный статус: {homework_status}')
@@ -99,7 +100,7 @@ def check_tokens():
 
     for var, val in env_variables.items():
         if val is None:
-            logging.critical(f'Отсутствует переменная {var}')
+            logger.critical(f'Отсутствует переменная {var}')
             return False
     return True
 
@@ -109,19 +110,20 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
 
+    if not check_tokens():
+        raise SystemExit('Критическая ошибка.')
+
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            
-            current_timestamp = int(time.time())
-            time.sleep(RETRY_TIME)
-
+            homework = check_response(response)
+            message = parse_status(homework)
+            send_message(bot, message)
+            current_timestamp = response['current_date']
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            ...
-            time.sleep(RETRY_TIME)
-        else:
-            ...
+            send_message(bot, message)
+        time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
