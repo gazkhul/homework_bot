@@ -13,7 +13,7 @@ import exceptions
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -36,10 +36,10 @@ HOMEWORK_STATUSES = {
 
 
 def send_message(bot, message):
-    """Отправка сообщения с текущим статусом проверки."""
+    """Отправка сообщения."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-    except Exception as error:
+    except exceptions.SendMessageError as error:
         logger.error(f'Сообщение не отправлено {error}')
 
 
@@ -49,18 +49,17 @@ def get_api_answer(current_timestamp):
     params = {'from_date': timestamp}
     try:
         answer = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        logger.info('Получен ответ от сервера.')
-    except Exception as error:
+    except exceptions.EndpointError as error:
         logger.error(f'API не доступен: {error}')
         raise SystemError(f'API не доступен: {error}')
 
     msg = f'HTTP ERROR: {answer.status_code}'
     if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
         logger.error(msg)
-        raise Exception(msg)
+        raise exceptions.HTTPError(msg)
     elif answer.status_code != HTTPStatus.OK:
         logger.error(msg)
-        raise Exception(msg)
+        raise exceptions.HTTPError(msg)
     return answer.json()
 
 
@@ -71,7 +70,7 @@ def check_response(response):
         raise TypeError('Некорректный тип данных.')
     try:
         homeworks = response['homeworks']
-        logger.info('Список работ получен.')
+        logger.info('Список работ доступен.')
     except KeyError as error:
         logger.error(f'Список работ не доступен: {error}')
     if homeworks is None:
@@ -79,7 +78,7 @@ def check_response(response):
         raise IndexError('Данные отсутствуют.')
     elif type(homeworks) is not list:
         logger.error('Некорректный тип данных.')
-        raise IndexError('Некорректный тип данных.')
+        raise TypeError('Некорректный тип данных.')
     return homeworks
 
 
@@ -89,7 +88,8 @@ def parse_status(homework):
     homework_status = homework['status']
     verdict = HOMEWORK_STATUSES[homework_status]
     if homework_status not in HOMEWORK_STATUSES:
-        raise Exception(f'Неизвестный статус: {homework_status}')
+        logger.debug('Неизвестный статус.')
+        raise KeyError(f'Неизвестный статус: {homework_status}')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -103,25 +103,30 @@ def main():
     logger.info('Бот запущен.')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
+    last_err_msg = ''
 
     if not check_tokens():
-        logger.error('Бот остановлен.')
+        logger.critical('Бот остановлен.')
         raise SystemExit('Выход из программы.')
+    logger.info('Токен найден.')
 
-    while True:
+    while check_tokens() is True:
         try:
             response = get_api_answer(current_timestamp)
+            logger.info('Получен ответ от сервера.')
             homework = check_response(response)
             for status in homework:
                 message = parse_status(status)
                 send_message(bot, message)
                 logger.info('Сообщение успешно отправлено.')
             current_timestamp = response['current_date']
-        except Exception as error:
+        except SystemError as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(error)
-            send_message(bot, message)
-            logger.info('Сообщение с ошибкой отправлено.')
+            if message != last_err_msg:
+                send_message(bot, message)
+                logger.info('Сообщение с ошибкой отправлено.')
+                last_err_msg = message
         finally:
             time.sleep(RETRY_TIME)
 
