@@ -8,6 +8,8 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
+import exceptions
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,6 @@ logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
-handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -38,7 +39,6 @@ def send_message(bot, message):
     """Отправка сообщения с текущим статусом проверки."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        logger.info('Сообщение успешно отправлено.')
     except Exception as error:
         logger.error(f'Сообщение не отправлено {error}')
 
@@ -49,67 +49,53 @@ def get_api_answer(current_timestamp):
     params = {'from_date': timestamp}
     try:
         answer = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        logger.info('Получен ответ от сервера.')
     except Exception as error:
         logger.error(f'API не доступен: {error}')
         raise SystemError(f'API не доступен: {error}')
 
+    msg = f'HTTP ERROR: {answer.status_code}'
     if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
-        logger.error(f'HTTP ERROR: {answer.status_code}')
-        raise Exception(f'HTTP ERROR: {answer.status_code}')
+        logger.error(msg)
+        raise Exception(msg)
     elif answer.status_code != HTTPStatus.OK:
-        logger.error(f'HTTP ERROR: {answer.status_code}')
-        raise Exception(f'HTTP ERROR: {answer.status_code}')
+        logger.error(msg)
+        raise Exception(msg)
     return answer.json()
 
 
 def check_response(response):
     """Проверяет ответ API на корректность и возвращает список работ."""
     if type(response) is not dict:
-        logger.error('Некорректный тип данных')
-        raise TypeError('Некорректный тип данных')
+        logger.error('Некорректный тип данных.')
+        raise TypeError('Некорректный тип данных.')
     try:
         homeworks = response['homeworks']
         logger.info('Список работ получен.')
-        if homeworks is None:
-            logger.error('Данные отсутствуют.')
-            raise IndexError('Данные отсутствуют.')
     except KeyError as error:
         logger.error(f'Список работ не доступен: {error}')
-
+    if homeworks is None:
+        logger.error('Данные отсутствуют.')
+        raise IndexError('Данные отсутствуют.')
+    elif type(homeworks) is not list:
+        logger.error('Некорректный тип данных.')
+        raise IndexError('Некорректный тип данных.')
     return homeworks
 
 
 def parse_status(homework):
     """Проверка статуса проверки последней работы."""
-    try:
-        homework_name = homework['homework_name']
-        logger.info('Название работы получено.')
-        homework_status = homework['status']
-        logger.info('Статус работы получен.')
-        verdict = HOMEWORK_STATUSES[homework_status]
-        logger.info('Найдено совпадение в словаре.')
-    except KeyError as error:
-        logging.error(f'Отсутствие ожидаемых ключей в ответе API: {error}')
-
+    homework_name = homework['homework_name']
+    homework_status = homework['status']
+    verdict = HOMEWORK_STATUSES[homework_status]
     if homework_status not in HOMEWORK_STATUSES:
         raise Exception(f'Неизвестный статус: {homework_status}')
-
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def check_tokens():
     """Проверка доступности переменных окружения."""
-    env_variables = {
-        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
-        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
-        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
-    }
-
-    for var, val in env_variables.items():
-        if val is None:
-            logger.critical(f'Отсутствует переменная {var}')
-            return False
-    return True
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def main():
@@ -119,8 +105,8 @@ def main():
     current_timestamp = int(time.time())
 
     if not check_tokens():
-        raise SystemExit('Критическая ошибка.')
-    logger.info('Токены найдены.')
+        logger.error('Бот остановлен.')
+        raise SystemExit('Выход из программы.')
 
     while True:
         try:
@@ -129,12 +115,15 @@ def main():
             for status in homework:
                 message = parse_status(status)
                 send_message(bot, message)
+                logger.info('Сообщение успешно отправлено.')
             current_timestamp = response['current_date']
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(error)
             send_message(bot, message)
-        time.sleep(RETRY_TIME)
+            logger.info('Сообщение с ошибкой отправлено.')
+        finally:
+            time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
