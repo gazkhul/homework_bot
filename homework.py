@@ -40,7 +40,7 @@ def send_message(bot, message):
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except exceptions.SendMessageError as error:
-        logger.error(f'Сообщение не отправлено {error}')
+        raise SystemError(f'Ошибка отправки сообщения: {error}')
 
 
 def get_api_answer(current_timestamp):
@@ -49,24 +49,20 @@ def get_api_answer(current_timestamp):
     params = {'from_date': timestamp}
     try:
         answer = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    except exceptions.EndpointError as error:
-        logger.error(f'API не доступен: {error}')
-        raise SystemError(f'API не доступен: {error}')
-
-    msg = f'HTTP ERROR: {answer.status_code}'
-    if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
-        logger.error(msg)
-        raise exceptions.HTTPError(msg)
-    elif answer.status_code != HTTPStatus.OK:
-        logger.error(msg)
-        raise exceptions.HTTPError(msg)
+    except Exception as error:
+        raise SystemError(
+            f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен.'
+            f'Код ответа API: {answer.status_code}'
+            f'ERROR: {error}'
+        )
+    if answer.status_code != HTTPStatus.OK:
+        raise exceptions.HTTPError(f'HTTP ERROR: {answer.status_code}')
     return answer.json()
 
 
 def check_response(response):
     """Проверяет ответ API на корректность и возвращает список работ."""
-    if type(response) is not dict:
-        logger.error('Некорректный тип данных.')
+    if not isinstance(response, dict):
         raise TypeError('Некорректный тип данных.')
     try:
         homeworks = response['homeworks']
@@ -83,7 +79,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Проверка статуса проверки последней работы."""
+    """Проверка статуса последней работы."""
     homework_name = homework['homework_name']
     homework_status = homework['status']
     verdict = HOMEWORK_STATUSES[homework_status]
@@ -119,7 +115,6 @@ def main():
                 message = parse_status(status)
                 send_message(bot, message)
                 logger.info('Сообщение успешно отправлено.')
-            current_timestamp = response['current_date']
         except SystemError as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(error)
@@ -127,7 +122,10 @@ def main():
                 send_message(bot, message)
                 logger.info('Сообщение с ошибкой отправлено.')
                 last_err_msg = message
+            else:
+                logger.error(message)
         finally:
+            current_timestamp = response['current_date']
             time.sleep(RETRY_TIME)
 
 

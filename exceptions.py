@@ -4,12 +4,6 @@ class SendMessageError(Exception):
     pass
 
 
-class EndpointError(Exception):
-    """Не получен ответ от сервера."""
-
-    pass
-
-
 class HTTPError(Exception):
     """Неверный ответ сервера."""
 
