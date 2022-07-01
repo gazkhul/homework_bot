@@ -30,7 +30,7 @@ def send_message(bot, message):
     """Отправка сообщения."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-    except telegram.TelegramError as error:
+    except telegram.error.TelegramError as error:
         raise SystemError(f'Ошибка отправки сообщения: {error}')
 
 
