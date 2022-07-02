@@ -8,6 +8,8 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
+import exceptions
+
 load_dotenv()
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -31,17 +33,19 @@ def send_message(bot, message):
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.error.TelegramError as error:
-        raise SystemError(f'Ошибка отправки сообщения: {error}')
+        raise exceptions.SendMessageError(
+            f'Ошибка отправки сообщения: {error}'
+        )
 
 
 def get_api_answer(current_timestamp):
     """GET-запрос к API Я.Практикум."""
-    timestamp = current_timestamp or int(time.time())
+    timestamp = current_timestamp
     params = {'from_date': timestamp}
     try:
         answer = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.exceptions.RequestException as error:
-        raise SystemError(
+        raise exceptions.RequestError(
             f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен.'
             f'Код ответа API: {answer.status_code}'
             f'ERROR: {error}'
@@ -57,7 +61,7 @@ def check_response(response):
     """Проверяет ответ API на корректность и возвращает список работ."""
     if not isinstance(response, dict):
         raise TypeError('Некорректный тип данных.')
-    elif 'homeworks' not in response:
+    elif ('homeworks' or 'current_date') not in response:
         raise KeyError('Список работ не доступен')
 
     homeworks = response['homeworks']
@@ -71,7 +75,7 @@ def check_response(response):
 
 def parse_status(homework):
     """Проверка статуса последней работы."""
-    if 'homework_name' and 'status' not in homework:
+    if ('homework_name' or 'status') not in homework:
         raise KeyError('Отсутствую данные последней работы')
 
     homework_name = homework['homework_name']
@@ -86,53 +90,39 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверка доступности переменных окружения."""
-    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
+    env_var = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+
+    for token in env_var:
+        if (len(str(token)) == 0) or (token is None):
+            return False
+    return True
 
 
 def main():
     """Основная логика работы бота."""
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
     logger.info('Бот запущен.')
+
+    if not check_tokens():
+        logger.critical('Отсутствует обязательная переменная окружения.')
+        raise SystemExit('Программа принудительно остановлена.')
+    else:
+        logger.info('Токен найден, продолжаем.')
+
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     last_err_msg = ''
-    env_var = {
-        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
-        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
-        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
-    }
 
-    for key, token in env_var.items():
-        if len(token) == 0:
-            logger.critical(
-                f'Отсутствует обязательная переменная окружения: {key}.'
-            )
-            raise SystemExit('Программа принудительно остановлена.')
-        else:
-            logger.info(f'{key} найден, продолжаем.')
-
-    while check_tokens() is True:
+    while True:
         try:
             response = get_api_answer(current_timestamp)
-            homework = check_response(response)
-            if len(homework) > 0:
-                for status in homework:
-                    if status not in HOMEWORK_VERDICTS:
-                        logger.error(f'{status} - неизвестный статус.')
-                    else:
-                        logger.info('Получен статус последней работы.')
-                    message = parse_status(status)
-                    send_message(bot, message)
-                    logger.info('Сообщение успешно отправлено.')
+            homeworks = check_response(response)
+            if len(homeworks) != 0:
+                message = parse_status(homeworks[0])
+                send_message(bot, message)
+                logger.info('Сообщение успешно отправлено.')
             else:
-                logger.debug('В ответе отсутствуют новые статусы.')
-        except SystemError as error:
+                logger.debug('Статус последней работы не изменился.')
+        except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(error)
             if message != last_err_msg:
@@ -145,4 +135,11 @@ def main():
 
 
 if __name__ == '__main__':
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     main()

@@ -4,7 +4,7 @@ class SendMessageError(Exception):
     pass
 
 
-class HTTPError(Exception):
-    """Неверный ответ сервера."""
+class RequestError(Exception):
+    """Ошибка запроса к API."""
 
     pass
