@@ -45,7 +45,7 @@ def get_api_answer(current_timestamp):
     try:
         answer = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.exceptions.RequestException as error:
-        raise exceptions.RequestError(
+        raise exceptions.RequestToAPIError(
             f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен.'
             f'Код ответа API: {answer.status_code}'
             f'ERROR: {error}'
@@ -61,28 +61,34 @@ def check_response(response):
     """Проверяет ответ API на корректность и возвращает список работ."""
     if not isinstance(response, dict):
         raise TypeError('Некорректный тип данных.')
-    elif ('homeworks' or 'current_date') not in response:
-        raise KeyError('Список работ не доступен')
+    elif 'homeworks' not in response or 'current_date' not in response:
+        raise exceptions.KeyNotFoundInResponseError(
+            'Список работ или дата недоступны.'
+        )
 
     homeworks = response['homeworks']
 
-    if homeworks is None:
-        raise IndexError('Данные отсутствуют.')
-    elif not isinstance(homeworks, list):
-        raise TypeError('Некорректный тип данных.')
+    if homeworks is None or not isinstance(homeworks, list):
+        raise exceptions.IncorrectTypeError(
+            'Некорректный тип данных в списке домашек.'
+        )
     return homeworks
 
 
 def parse_status(homework):
     """Проверка статуса последней работы."""
-    if ('homework_name' or 'status') not in homework:
-        raise KeyError('Отсутствую данные последней работы')
+    if 'homework_name' not in homework or 'status' not in homework:
+        raise KeyError(
+            'Отсутствует имя или статус в домашней работе.'
+        )
 
     homework_name = homework['homework_name']
     homework_status = homework['status']
 
     if homework_status not in HOMEWORK_VERDICTS:
-        raise KeyError(f'Неизвестный статус: {homework_status}')
+        raise exceptions.IncorrectStatusError(
+            f'Неизвестный статус: {homework_status}'
+        )
 
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -106,7 +112,7 @@ def main():
         logger.critical('Отсутствует обязательная переменная окружения.')
         raise SystemExit('Программа принудительно остановлена.')
     else:
-        logger.info('Токен найден, продолжаем.')
+        logger.debug('Токен найден, продолжаем.')
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
@@ -115,14 +121,17 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
+            logger.debug('API Я.Практикум доступен.')
             homeworks = check_response(response)
+            logger.debug('Список домашек доступен.')
             if len(homeworks) != 0:
                 message = parse_status(homeworks[0])
+                logger.debug('Статус домашней работы изменился.')
                 send_message(bot, message)
                 logger.info('Сообщение успешно отправлено.')
             else:
                 logger.debug('Статус последней работы не изменился.')
-        except Exception as error:
+        except exceptions.MainFunctionError as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(error)
             if message != last_err_msg:
@@ -131,6 +140,7 @@ def main():
                 last_err_msg = message
         finally:
             current_timestamp = response['current_date']
+            logger.debug(f'Ожидаем {RETRY_TIME} секунд.')
             time.sleep(RETRY_TIME)
 
 
