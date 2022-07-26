@@ -5,7 +5,7 @@ on:
       - master
 jobs:
   run_tests:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@master
       - uses: actions/setup-python@v1
@@ -16,7 +16,7 @@ jobs:
         run:  pip install -r requirements.txt
   build_and_pub:
     needs: [run_tests]
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted]
     env:
       LOGIN: ${{ secrets.DOCKER_LOGIN }}
       NAME: ${{ secrets.DOCKER_NAME }}
