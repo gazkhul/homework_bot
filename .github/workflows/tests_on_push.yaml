@@ -12,5 +12,3 @@ jobs:
         with:
           python-version: 3.8
           architecture: 'x64'
-      - name: Tests
-        run:  source venv/bin/activate && pytest
