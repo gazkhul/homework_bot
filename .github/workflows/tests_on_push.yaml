@@ -14,3 +14,17 @@ jobs:
           architecture: 'x64'
       - name: Install requirements
         run:  pip install -r requirements.txt
+  build_and_pub:
+    needs: [run_tests]
+    runs-on: [ubuntu-latest]
+    env:
+      LOGIN: ${{ secrets.DOCKER_LOGIN }}
+      NAME: ${{ secrets.DOCKER_NAME }}
+    steps:
+      - name: login to docker
+        run: echo ${{ secrets.DOCKER_TOKEN }} | docker login -u ${{ secrets.DOCKER_LOGIN }} --password-stdin
+      - uses: actions/checkout@master
+      - name: build image
+        run: docker build -t $LOGIN/$NAME:${GITHUB_REF:11} -f Dockerfile
+      - name: push image to docker hub
+        run: docker push $LOGIN/$NAME:${GITHUB_REF:11}
