@@ -152,3 +152,6 @@ media/
 
 test.py
 todo.md
+
+/src
+node_modules
