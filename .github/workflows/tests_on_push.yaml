@@ -14,3 +14,5 @@ jobs:
           architecture: 'x64'
       - name: Install requiriments
         run:  pip install -r requiriments.txt
+      - name: Check codestyle
+        run: pycodestyle homework.py
