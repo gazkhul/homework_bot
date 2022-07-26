@@ -24,9 +24,6 @@ jobs:
       - name: login to docker
         run: echo ${{ secrets.DOCKER_TOKEN }} | docker login -u ${{ secrets.DOCKER_LOGIN }} --password-stdin
       - uses: actions/checkout@master
-      - name: build image
-        run: docker build -t $NAME .
-      - name: build image
-        run: docker build -t $NAME $LOGIN/$NAME:${GITHUB_REF:11} -f Dockerfile
-      - name: push image to docker hub
-        run: docker push $LOGIN/$NAME:${GITHUB_REF:11}
+        with:
+          push: true
+          tags: gazkhul/homework-bot:latest
