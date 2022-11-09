@@ -61,7 +61,8 @@ def check_response(response):
     """Проверяет ответ API на корректность и возвращает список работ."""
     if not isinstance(response, dict):
         raise TypeError('Некорректный тип данных.')
-    elif 'homeworks' not in response or 'current_date' not in response:
+
+    if 'homeworks' not in response or 'current_date' not in response:
         raise exceptions.KeyNotFoundInResponseError(
             'Список работ или дата недоступны.'
         )
@@ -111,8 +112,8 @@ def main():
     if not check_tokens():
         logger.critical('Отсутствует обязательная переменная окружения.')
         raise SystemExit('Программа принудительно остановлена.')
-    else:
-        logger.debug('Токен найден, продолжаем.')
+
+    logger.debug('Токен найден, продолжаем.')
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
