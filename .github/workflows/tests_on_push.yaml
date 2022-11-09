@@ -28,7 +28,6 @@ jobs:
         with:
           fetch-depth: 0
       - id: changed-files-specific
-        name: Get changed file
         uses: tj-actions/changed-files@v34
         with:
           files: |
