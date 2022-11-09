@@ -61,8 +61,9 @@ jobs:
           echo TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }} >> .env
           sudo docker stop yandex_homework_bot
           sudo docker rm yandex_homework_bot
-          sudo docker pull gazkhul/homework-bot
-          sudo docker run --env-file .env -d --name yandex_homework_bot gazkhul/homework-bot
+          sudo docker pull ${{ secrets.DOCKER_USERNAME }}/homework-bot
+          sudo docker run --env-file .env -d --name yandex_homework_bot ${{ secrets.DOCKER_USERNAME }}/homework-bot
+          rm .env
   send_message:
     name: Send message to Telegram
     runs-on: ubuntu-latest
