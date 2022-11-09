@@ -19,8 +19,8 @@ python homework.py
 ```
 ## Docker:
 ```
-docker run -d -e PRACTICUM_TOKEN='<token>' \
-            -e TELEGRAM_TOKEN='<token>' \
-            -e TELEGRAM_CHAT_ID='<token>' \
-            gazkhul/homework-bot
+docker run --restart=always -d -e PRACTICUM_TOKEN='<token>' \
+                               -e TELEGRAM_TOKEN='<token>' \
+                               -e TELEGRAM_CHAT_ID='<token>' \
+                               gazkhul/homework-bot
 ```

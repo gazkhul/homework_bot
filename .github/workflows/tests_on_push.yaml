@@ -1,40 +1,63 @@
-name: CI
+name: homework_bot CI/CD
 on:
   push:
     branches:
       - master
 jobs:
   run_tests:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v2
         with:
           python-version: 3.8
           architecture: 'x64'
-      - name: Install requirements
-        run:  pip install -r requirements.txt
+      - name: Install dependencies
+          run: |
+            python -m pip install --upgrade pip
+            python -m install flake8 pep8-naming flake8-broken-line flake8-return flake8-isort
+            python -m pip install -r requirements.txt
+        - name: Test with flake8 and pytest
+          run: |
+            python -m flake8 .
+            pytest
   build_and_pub:
-    needs: [run_tests]
-    runs-on: [ubuntu-latest]
-    env:
-      LOGIN: ${{ secrets.DOCKER_LOGIN }}
-      NAME: ${{ secrets.DOCKER_NAME }}
+    needs: run_tests
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Check out the repo
         uses: actions/checkout@v3
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Login to DockerHub
+      - name: Login to Docker
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_LOGIN }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-      - name: Build and push
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Push to Docker Hub
         uses: docker/build-push-action@v3
         with:
           context: .
           push: true
-          tags: gazkhul/homework-bot:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/homework-bot:latest
+  deploy:
+    name: Deploy project on remote host
+    runs-on: ubuntu-latest
+    needs: build_and_pub
+    steps:
+    - name: executing remote ssh commands to deploy
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.REMOTE_HOST }}
+        username: ${{ secrets.REMOTE_HOST_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: |
+          touch .env
+          echo PRACTICUM_TOKEN=${{ secrets.PRACTICUM_TOKEN }} >> .env
+          echo TELEGRAM_TOKEN=${{ secrets.TELEGRAM_TOKEN }} >> .env
+          echo TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }} >> .env
+          sudo docker stop yandex_homework_bot
+          sudo docker rm yandex_homework_bot
+          sudo docker pull gazkhul/homework-bot
+          sudo docker run --env-file .env -d --name yandex_homework_bot gazkhul/homework-bot
