@@ -32,9 +32,3 @@ class KeyNotFoundInResponseError(Exception):
     """Отсутствует обязательный ключ."""
 
     pass
-
-
-class KeyNotFoundInRespDFSWonseError(Exception):
-    """Отсутствует обязательный ключ."""
-
-    pass
