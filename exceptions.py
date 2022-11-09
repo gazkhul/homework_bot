@@ -23,12 +23,18 @@ class MainFunctionError(Exception):
 
 
 class IncorrectTypeError(Exception):
-    """Сломан список домашек ааа."""
+    """Сломан список домашек."""
 
     pass
 
 
 class KeyNotFoundInResponseError(Exception):
+    """Отсутствует обязательный ключ."""
+
+    pass
+
+
+class KeyNotFoundInRespDFSWonseError(Exception):
     """Отсутствует обязательный ключ."""
 
     pass
