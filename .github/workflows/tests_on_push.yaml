@@ -24,6 +24,7 @@ jobs:
           python -m flake8 .
           pytest
   test_changed_files:
+    needs: run_tests
     name: Test changed-files
     runs-on: ubuntu-latest
     steps:
@@ -35,11 +36,12 @@ jobs:
         uses: tj-actions/changed-files@v34
         with:
           files: |
-            - homework.py
-            - exceptions.py 
+            homework.py
+            exceptions.py 
   build_and_pub:
-    needs: run_tests
+    needs: test_changed_files
     runs-on: ubuntu-latest
+    if: needs.changed-files.outputs.any_changed == 'true'
     steps:
       - name: Check out the repo
         uses: actions/checkout@v3
