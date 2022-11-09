@@ -23,7 +23,7 @@ class MainFunctionError(Exception):
 
 
 class IncorrectTypeError(Exception):
-    """Сломан список домашек."""
+    """Сломан список домашек ааа."""
 
     pass
 
